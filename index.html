@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Aura - Chat with Strangers</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        
+        <!-- Onboarding Overlay -->
+        <div id="onboarding-overlay" class="overlay glass active">
+            <div class="onboarding-card">
+                <h1>Chat with Strangers</h1>
+                <p>Connect with people around the world instantly.</p>
+                
+                <div class="form-group">
+                    <label>Your Gender</label>
+                    <select id="my-gender">
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>You want to talk to</label>
+                    <select id="match-gender">
+                        <option value="any">Any</option>
+                        <option value="female">Female</option>
+                        <option value="male">Male</option>
+                    </select>
+                </div>
+                
+                <button id="find-stranger-btn" class="primary-btn">Start Connecting</button>
+            </div>
+        </div>
+
+        <aside class="sidebar glass">
+            <div class="sidebar-header">
+                <h2>Aura</h2>
+            </div>
+            <div class="status-panel">
+                <div class="status-indicator" id="sidebar-status-indicator"></div>
+                <h3 id="sidebar-status-text">Disconnected</h3>
+                <p id="sidebar-subtext">Click 'New Chat' to find someone.</p>
+                <button id="new-chat-btn" class="secondary-btn hidden">New Chat</button>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="chat-area glass">
+            <header class="chat-header">
+                <div class="chat-header-info">
+                    <div class="avatar">
+                        <div class="stranger-avatar"><i class="fas fa-user-secret"></i></div>
+                    </div>
+                    <div>
+                        <h2 id="header-stranger-name">Stranger</h2>
+                        <span class="status" id="header-status-text">Waiting to connect...</span>
+                    </div>
+                </div>
+                <div class="chat-header-actions">
+                    <button class="icon-btn hidden" title="New Chat" id="mobile-new-chat-btn"><i class="fas fa-plus"></i></button>
+                    <button class="icon-btn" title="Skip" id="skip-btn"><i class="fas fa-forward-step"></i></button>
+                    <button class="icon-btn" title="End Chat" id="end-chat-btn"><i class="fas fa-times"></i></button>
+                </div>
+            </header>
+
+            <div class="chat-messages" id="chat-messages">
+                <!-- Messages will be injected here -->
+            </div>
+
+            <!-- Popups for Emojis and Stickers -->
+            <div id="emoji-popup" class="popup glass hidden">
+                <div class="emoji-picker-container" id="custom-emoji-picker"></div>
+            </div>
+            <div id="sticker-popup" class="popup glass hidden">
+                <div class="stickers-grid">
+                    <img src="stickers/thumbs_up.jpg" class="sticker-option" data-sticker="thumbs_up.jpg" alt="Thumbs Up">
+                    <img src="stickers/heart.jpg" class="sticker-option" data-sticker="heart.jpg" alt="Heart">
+                    <img src="stickers/laugh.jpg" class="sticker-option" data-sticker="laugh.jpg" alt="Laugh">
+                </div>
+            </div>
+
+            <footer class="chat-input-area">
+                <button class="icon-btn" id="emoji-btn" title="Send Emoji"><i class="far fa-face-smile"></i></button>
+                <button class="icon-btn" id="sticker-btn" title="Send Sticker"><i class="far fa-note-sticky"></i></button>
+                <div class="input-wrapper">
+                    <input type="file" id="image-upload" accept="image/*" class="hidden-input">
+                    <button class="icon-btn" id="upload-btn" title="Send Image"><i class="fas fa-image"></i></button>
+                    <input type="text" id="message-input" placeholder="Type a message..." autocomplete="off" disabled>
+                </div>
+                <button class="send-btn" id="send-btn" disabled><i class="fas fa-paper-plane"></i></button>
+            </footer>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
