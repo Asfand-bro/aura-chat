@@ -115,8 +115,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (window.location.protocol === 'file:') {
             // When opened directly as an HTML file
             wsUrl = 'ws://localhost:3000';
+        } else if (window.location.port === '8000') {
+            // When accessed via Python HTTP server (from start.bat)
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            wsUrl = `${wsProtocol}//${window.location.hostname}:8765`;
         } else {
-            // When accessed via the HTTP server (e.g. Render, Railway)
+            // When accessed via the Node.js server (e.g. Render, Railway, or local port 3000)
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             wsUrl = `${wsProtocol}//${window.location.host}`;
         }
