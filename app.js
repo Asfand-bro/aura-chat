@@ -29,7 +29,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const customEmojiPicker = document.getElementById('custom-emoji-picker');
     const stickerOptions = document.querySelectorAll('.sticker-option');
 
-    let socket;
+    let currentRoomId = null;
+    let myUserId = null;
+    let messagesRef = null;
+    let roomRef = null;
+    let waitingRef = null;
     let isConnected = false;
 
     // Mobile viewport fix
@@ -106,57 +110,74 @@ document.addEventListener('DOMContentLoaded', () => {
     // Show onboarding immediately
     onboardingOverlay.classList.add('active');
 
-    // Setup WebSocket
-    function setupWebSocket() {
-        if (socket) {
-            socket.close();
-        }
-        let wsUrl;
-        if (window.location.protocol === 'file:') {
-            // When opened directly as an HTML file
-            wsUrl = 'ws://localhost:3000';
-        } else if (window.location.port === '8000') {
-            // When accessed via Python HTTP server (from start.bat)
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            wsUrl = `${wsProtocol}//${window.location.hostname}:8765`;
-        } else {
-            // When accessed via the Node.js server (e.g. Render, Railway, or local port 3000)
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            wsUrl = `${wsProtocol}//${window.location.host}`;
-        }
-        socket = new WebSocket(wsUrl);
-        socket.onopen = () => {
-            console.log("Connected to server");
-            const myGender = myGenderSelect.value;
-            const matchGender = matchGenderSelect.value;
-            socket.send(JSON.stringify({
-                type: 'find_match',
-                my_gender: myGender,
-                match_gender: matchGender
-            }));
-        };
+    // Setup Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyB3WHYWFZoW0i1VbP4eIYhMvwDny8H8sIA",
+      authDomain: "aura-app-62693.firebaseapp.com",
+      projectId: "aura-app-62693",
+      storageBucket: "aura-app-62693.firebasestorage.app",
+      messagingSenderId: "34222824047",
+      appId: "1:34222824047:web:b99e78a2eb94db552ecb9a"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
 
-        socket.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            
-            if (data.type === 'match_found') {
-                handleMatchFound();
-            } else if (data.type === 'message') {
-                addMessage(data.text, 'received');
-            } else if (data.type === 'image') {
-                addImageMessage(data.dataUrl, 'received');
-            } else if (data.type === 'stranger_disconnected') {
+    function generateId() {
+        return Math.random().toString(36).substring(2, 15);
+    }
+
+    function isMatch(myGen, myMatchGen, strangerGen, strangerMatchGen) {
+        const match1 = myMatchGen === 'any' || myMatchGen === strangerGen;
+        const match2 = strangerMatchGen === 'any' || strangerMatchGen === myGen;
+        return match1 && match2;
+    }
+
+    function cleanupConnections() {
+        if (waitingRef) {
+            waitingRef.remove();
+            waitingRef.onDisconnect().cancel();
+        }
+        if (myUserId) {
+            database.ref(`matched/${myUserId}`).off();
+            database.ref(`matched/${myUserId}`).remove();
+            database.ref(`matched/${myUserId}`).onDisconnect().cancel();
+        }
+        if (messagesRef) messagesRef.off();
+        if (roomRef) {
+            roomRef.child('status').off();
+            if (isConnected) roomRef.child('status').set('disconnected');
+            roomRef.child('status').onDisconnect().cancel();
+        }
+    }
+
+    function joinRoom(roomId) {
+        currentRoomId = roomId;
+        roomRef = database.ref(`rooms/${roomId}`);
+        messagesRef = database.ref(`rooms/${roomId}/messages`);
+        
+        // Handle disconnect during chat
+        roomRef.child('status').onDisconnect().set('disconnected');
+        
+        handleMatchFound();
+        
+        // Listen for messages
+        messagesRef.on('child_added', (snap) => {
+            const msg = snap.val();
+            if (msg.senderId !== myUserId) {
+                if (msg.type === 'message') {
+                    addMessage(msg.text, 'received');
+                } else if (msg.type === 'image') {
+                    addImageMessage(msg.dataUrl, 'received');
+                }
+            }
+        });
+        
+        // Listen for partner disconnect
+        roomRef.child('status').on('value', (snap) => {
+            if (snap.val() === 'disconnected' && isConnected) {
                 strangerDisconnect();
             }
-        };
-
-        socket.onclose = () => {
-            console.log("Disconnected from server");
-            if (isConnected) {
-                strangerDisconnect();
-                addSystemMessage("Lost connection to server.");
-            }
-        };
+        });
     }
 
     // Event Listeners
@@ -179,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     imageUploadInput.addEventListener('change', handleImageUpload);
 
-    function startSearch() {
+    async function startSearch() {
         // Hide overlay if it's open
         onboardingOverlay.classList.remove('active');
         
@@ -187,6 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chatMessages.innerHTML = '';
         isConnected = false;
         disableInput();
+        cleanupConnections();
 
         // Update UI to searching state
         sidebarStatusIndicator.className = 'status-indicator searching';
@@ -202,7 +224,65 @@ document.addEventListener('DOMContentLoaded', () => {
 
         addSystemMessage("Looking for someone you can chat with...");
 
-        setupWebSocket();
+        myUserId = generateId();
+        const myGender = myGenderSelect.value;
+        const matchGender = matchGenderSelect.value;
+
+        try {
+            // 1. Fetch waiting pool
+            const snapshot = await database.ref('waiting').once('value');
+            const waitingPool = snapshot.val() || {};
+            
+            let matchedPartnerId = null;
+            for (const [partnerId, data] of Object.entries(waitingPool)) {
+                if (isMatch(myGender, matchGender, data.myGender, data.matchGender)) {
+                    matchedPartnerId = partnerId;
+                    break;
+                }
+            }
+            
+            if (matchedPartnerId) {
+                // Remove from waiting pool
+                await database.ref(`waiting/${matchedPartnerId}`).remove();
+                
+                // Create room
+                currentRoomId = generateId();
+                await database.ref(`rooms/${currentRoomId}`).set({
+                    timestamp: firebase.database.ServerValue.TIMESTAMP
+                });
+                
+                // Notify partner
+                await database.ref(`matched/${matchedPartnerId}`).set(currentRoomId);
+                
+                joinRoom(currentRoomId);
+            } else {
+                // Join waiting pool
+                waitingRef = database.ref(`waiting/${myUserId}`);
+                await waitingRef.set({
+                    myGender,
+                    matchGender,
+                    timestamp: firebase.database.ServerValue.TIMESTAMP
+                });
+                
+                // Handle disconnect while waiting
+                waitingRef.onDisconnect().remove();
+                database.ref(`matched/${myUserId}`).onDisconnect().remove();
+                
+                // Listen for match
+                database.ref(`matched/${myUserId}`).on('value', (snap) => {
+                    const roomId = snap.val();
+                    if (roomId) {
+                        database.ref(`matched/${myUserId}`).off();
+                        database.ref(`matched/${myUserId}`).remove();
+                        waitingRef.remove();
+                        joinRoom(roomId);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error("Matchmaking error:", error);
+            addSystemMessage("Could not connect to the database. Check your internet or Firebase rules.");
+        }
     }
 
     function handleMatchFound() {
@@ -225,10 +305,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function disconnectChat() {
-        if (socket) {
-            socket.close();
-        }
         if (!isConnected) return;
+        cleanupConnections();
         
         isConnected = false;
         disableInput();
@@ -252,7 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         isConnected = false;
         disableInput();
-        if (socket) socket.close();
+        cleanupConnections();
         
         sidebarStatusIndicator.className = 'status-indicator';
         sidebarStatusText.innerText = 'Disconnected';
@@ -269,31 +347,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function skipChat() {
-        if (socket) {
-            socket.onclose = null;
-            socket.onmessage = null;
-            socket.close();
-        }
+        cleanupConnections();
         startSearch();
     }
 
     function handleSendMessage() {
-        if (!isConnected || !socket) return;
+        if (!isConnected || !messagesRef) return;
         
         const text = messageInput.value.trim();
         if (text === '') return;
 
         addMessage(text, 'sent');
-        socket.send(JSON.stringify({
+        messagesRef.push({
             type: 'message',
-            text: text
-        }));
+            text: text,
+            senderId: myUserId,
+            timestamp: firebase.database.ServerValue.TIMESTAMP
+        });
         
         messageInput.value = '';
     }
 
     function handleImageUpload(e) {
-        if (!isConnected || !socket) return;
+        if (!isConnected || !messagesRef) return;
         
         const file = e.target.files[0];
         if (file) {
@@ -302,10 +378,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dataUrl = event.target.result;
                 addImageMessage(dataUrl, 'sent');
                 
-                socket.send(JSON.stringify({
+                messagesRef.push({
                     type: 'image',
-                    dataUrl: dataUrl
-                }));
+                    dataUrl: dataUrl,
+                    senderId: myUserId,
+                    timestamp: firebase.database.ServerValue.TIMESTAMP
+                });
             };
             reader.readAsDataURL(file);
             
