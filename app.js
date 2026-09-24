@@ -115,6 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
       apiKey: "AIzaSyB3WHYWFZoW0i1VbP4eIYhMvwDny8H8sIA",
       authDomain: "aura-app-62693.firebaseapp.com",
       projectId: "aura-app-62693",
+      databaseURL: "https://aura-app-62693-default-rtdb.firebaseio.com",
       storageBucket: "aura-app-62693.firebasestorage.app",
       messagingSenderId: "34222824047",
       appId: "1:34222824047:web:b99e78a2eb94db552ecb9a"
